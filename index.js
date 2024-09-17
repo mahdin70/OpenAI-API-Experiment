@@ -1,35 +1,24 @@
-const dotenv = require("dotenv");
-dotenv.config();
-
-const OpenAI = require("openai");
-const readline = require("readline");
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const readline = require('readline');
+const { getLayoutDetails } = require('./layoutUtils');
+const { getChatResponse, saveToHistory } = require('./completionHandler');
 
 const userInterface = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
 });
 
-const messages = [];
+const extraInstruction = 'Please Give the Magazine By Strictly Following the Layout Details Provided Below\n';
 
 userInterface.prompt();
-userInterface.on("line", async (input) => {
+userInterface.on('line', async (input) => {
   try {
-    messages.push({ role: "user", content: input });
+    const layoutDetails = getLayoutDetails();
+    const prompt = `User prompt: ${input}\n${extraInstruction}\nLayout Details:\n${layoutDetails}`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: messages, 
-    });
-
-    const assistantMessage = response.choices[0].message.content;
+    const assistantMessage = await getChatResponse(prompt);
     console.log(assistantMessage);
-    console.log(messages);
 
-    messages.push({ role: "assistant", content: assistantMessage });
+    saveToHistory(input, assistantMessage);
   } catch (error) {
     console.error('Error:', error.message);
   }
