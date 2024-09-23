@@ -11,9 +11,10 @@ const openaiApiKey = process.env.OPENAI_API_KEY;
 const llm = new ChatOpenAI({
   model: "gpt-4o-mini",
   openaiApiKey: openaiApiKey,
-  temperature: 0.5,
-  maxTokens: 16300,
-  presencePenalty: 0.8,
+  temperature: 0.5,      // Balanced creativity and relevance
+  maxTokens: 16384,      // Maximum token limit
+  topP: 0.5,             // Prevent repetition
+  presencePenalty: 0.8   // Maintains Context Strictly
 });
 
 const history = new InMemoryChatMessageHistory();

@@ -6,6 +6,12 @@ const loadData = () => {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 };
 
+const getTotalPages = () => {
+  const data = loadData();
+  const pageBlocks = data.Blocks.filter((block) => block.BlockType === "PAGE");
+  return pageBlocks.length;
+};
+
 const getBlockById = (data, blockId) => {
   return data.Blocks.find((block) => block.Id === blockId);
 };
@@ -45,7 +51,7 @@ const renderBlockWithCounts = (data, block, blockCounts) => {
   return output;
 };
 
-const getLayoutDetails = () => {
+const getLayoutDetailsForPage = (pageNumber) => {
   const data = loadData();
   const pageBlocks = data.Blocks.filter((block) => block.BlockType === "PAGE");
   let layoutDetails = "";
@@ -58,15 +64,16 @@ const getLayoutDetails = () => {
     LAYOUT_FOOTER: [],
   };
 
-  pageBlocks.forEach((pageBlock) => {
-    layoutDetails += `Page ${pageBlock.Page}\n`;
+  const currentPageBlock = pageBlocks.find((block) => block.Page === pageNumber);
+  if (currentPageBlock) {
+    layoutDetails += `Page ${currentPageBlock.Page}\n`;
 
-    const blockContent = pageBlock.Relationships[0].Ids.map((id) => getBlockById(data, id))
+    const blockContent = currentPageBlock.Relationships[0].Ids.map((id) => getBlockById(data, id))
       .map((block) => renderBlockWithCounts(data, block, blockCounts))
       .join("");
 
     layoutDetails += blockContent + "\n";
-  });
+  }
 
   return layoutDetails;
 };
@@ -88,15 +95,16 @@ const extractTextFromBlock = (data, block) => {
   return textContent.trim();
 };
 
-const getTextFromLayout = () => {
+const getTextFromLayoutForPage = (pageNumber) => {
   const data = loadData();
   const pageBlocks = data.Blocks.filter((block) => block.BlockType === "PAGE");
   let layoutText = "";
 
-  pageBlocks.forEach((pageBlock) => {
-    layoutText += `Page ${pageBlock.Page}\n`;
+  const currentPageBlock = pageBlocks.find((block) => block.Page === pageNumber);
+  if (currentPageBlock) {
+    layoutText += `Page ${currentPageBlock.Page}\n`;
 
-    pageBlock.Relationships[0].Ids.forEach((blockId) => {
+    currentPageBlock.Relationships[0].Ids.forEach((blockId) => {
       const block = getBlockById(data, blockId);
 
       if (["LAYOUT_TITLE", "LAYOUT_SECTION_HEADER", "LAYOUT_TEXT", "LAYOUT_HEADER", "LAYOUT_FOOTER"].includes(block.BlockType)) {
@@ -105,12 +113,13 @@ const getTextFromLayout = () => {
         layoutText += `${blockType}: ${text}\n`;
       }
     });
-  });
+  }
 
   return layoutText;
 };
 
 module.exports = {
-  getLayoutDetails,
-  getTextFromLayout,
+  getTotalPages,
+  getLayoutDetailsForPage,
+  getTextFromLayoutForPage,
 };

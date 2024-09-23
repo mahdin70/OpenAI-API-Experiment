@@ -1,44 +1,36 @@
 const { SystemMessage } = require("@langchain/core/messages");
 const { getLayoutDetails, getTextFromLayout } = require("./layoutUtils.js");
 
-const filePath = "./Texract-JSON/MedicalAnalyzeDocResponse.json";
-
 function getSystemMessage() {
-  const layoutDetails = getLayoutDetails(filePath);
-  const layoutText = getTextFromLayout(filePath);
+  const layoutDetails = getLayoutDetails();
+  const layoutText = getTextFromLayout();
 
   const systemPrompt = `
-    You are a highly creative AI assistant tasked with generating engaging, relevant, and well-structured magazine content based on the provided layout details and user queries.
+  You are a highly creative AI assistant tasked with generating engaging, relevant, and well-structured magazine content based on the provided layout details and user queries.
 
-    **Instructions**:
-    1. **Content Structure**: Use the provided document layout to ensure the magazine content strictly follows the appropriate structure and word count. For example:
-       - Layout Header
-       - Layout Title
-       - Layout Section Header
-       - Layout Text
-       - Layout Footer
+  **Instructions**:
+  1. **Strict Content Structure**: Follow the document layout exactly as specified. Ensure the content adheres to the required structure and word count limits:
+     - **Layout Header**: (max X words)
+     - **Layout Title**: (max Y words)
+     - **Layout Section Header**: (max Z words)
+     - **Layout Text**: (adheres to the specified word count)
     
-    2. **Word Count**: Strictly adhere to the word count for each layout element type given in the layout details. For instance:
-       - Titles should be concise, within the specified limit.
-       - Section headers should be informative but brief.
-       - Text sections should be comprehensive yet aligned with the word count constraints.
-    
-    3. **Content Tone & Style**:
-       - The tone of the response should match the extracted layout text's intended style.
-       - Feel free to be creative, but always keep the content relevant to the theme suggested by the layout.
-       - Avoid simply copying the provided text; instead, create new content that is inspired by the layout text and meets user intent.
+  2. **Adhere to Word Count**: You can give more than the specified word count but not less than that
 
-    4. **User's Query**: Base your content on the users query, ensuring the response is aligned with their needs while following the layout structure.
-    
-    **Document Layout Details**:\n
-    ${layoutDetails}
-    
-    **Extracted Layout Text from the document**:
-    The following text was extracted from the provided document layout. Use this as a reference to guide your tone, style, and overall structure, but generate new and creative content based on these themes: \n
-    ${layoutText}
-    
-    **Your Task**: Generate high-quality, creative magazine content that adheres to the layout structure and constraints. The content must match the users query, maintain the specified tone, and stay within the word count limits for each section.
-    `;
+  3. **Content Tone & Style**:
+     - Match the tone of the extracted layout text.
+     - Generate new content inspired by the layout text, ensuring relevance to the themes.
+
+  4. **Respond to User Query**: Base your content on the user's query, ensuring it aligns with their needs while strictly following the layout structure.
+
+  **Document Layout Details**:\n
+  ${layoutDetails}
+  
+  **Extracted Layout Text from the document**:\n
+  ${layoutText}
+  
+  **Your Task**: Generate high-quality, creative magazine content that strictly adheres to the layout structure and constraints, meets the user's query, and maintains the specified tone.
+`;
 
   return new SystemMessage(systemPrompt);
 }

@@ -1,6 +1,6 @@
 require("dotenv").config();
 const { MongoClient } = require("mongodb");
-const { getLayoutDetails, getTextFromLayout } = require("./layoutUtils");
+const { getLayoutDetailsForPage, getTextFromLayoutForPage } = require("./pageExtractor.js");
 
 const mongoUri = process.env.MONGO_URI;
 const client = new MongoClient(mongoUri);
@@ -13,21 +13,21 @@ async function initMongo() {
   try {
     await client.connect();
     db = client.db(dbName);
-    chatCollection = db.collection("ChatHistory");
+    chatCollection = db.collection("PaginatedChatHistory");
     console.log("MongoDB connected and collection initialized.");
   } catch (error) {
     console.error("Error connecting to MongoDB", error);
   }
 }
 
-const layoutDetails = getLayoutDetails();
-const layoutText = getTextFromLayout();
-
-async function appendMessage(role, content) {
+async function appendMessage(pageNumber, role, content) {
   try {
-    const conversation = await chatCollection.findOne();
+    const conversation = await chatCollection.findOne({ pageNumber });
 
     const timestamp = new Date();
+    const layoutDetails = getLayoutDetailsForPage(pageNumber);
+    const layoutText = getTextFromLayoutForPage(pageNumber);
+
     if (conversation) {
       if (role === "user") {
         await chatCollection.updateOne(
@@ -40,13 +40,15 @@ async function appendMessage(role, content) {
           }
         );
       } else if (role === "ai") {
-        if (!conversation.first_ai_reply) {
+        if (!conversation.firstAIReply) {
           await chatCollection.updateOne(
             { _id: conversation._id },
             {
               $set: {
                 firstAIReply: { role, content, timestamp },
                 latestAIReply: { role, content, timestamp },
+                layoutDetails,
+                layoutText,
                 updatedAt: timestamp,
               },
             }
@@ -64,32 +66,28 @@ async function appendMessage(role, content) {
         }
       }
     } else {
-      if (role === "user") {
-        await chatCollection.insertOne({
-          firstUserPrompt: { role: "user", content, timestamp },
-          latestUserPrompt: { role: "user", content, timestamp },
-          layoutDetails: layoutDetails,
-          layoutText: layoutText,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        });
-      } else if (role === "ai") {
-        await chatCollection.insertOne({
-          firstAIReply: { role: "ai", content, timestamp },
-          latestAIReply: { role: "ai", content, timestamp },
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        });
-      }
+      const newEntry = {
+        pageNumber,
+        firstUserPrompt: role === "user" ? { role, content, timestamp } : null,
+        latestUserPrompt: role === "user" ? { role, content, timestamp } : null,
+        firstAIReply: role === "ai" ? { role, content, timestamp } : null,
+        latestAIReply: role === "ai" ? { role, content, timestamp } : null,
+        layoutDetails,
+        layoutText,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+
+      await chatCollection.insertOne(newEntry);
     }
   } catch (error) {
     console.error("Error appending message:", error);
   }
 }
 
-async function fetchPreviousContext() {
+async function fetchPreviousContext(pageNumber) {
   try {
-    const conversation = await chatCollection.findOne();
+    const conversation = await chatCollection.findOne({ pageNumber });
 
     if (conversation) {
       return {
@@ -99,6 +97,8 @@ async function fetchPreviousContext() {
           userPrompt: conversation.latestUserPrompt || {},
           aiReply: conversation.latestAIReply || {},
         },
+        layoutDetails: conversation.layoutDetails || {},
+        layoutText: conversation.layoutText || {},
       };
     }
     return {};
