@@ -1,91 +1,114 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
 
-const inputFilePath = path.join(__dirname, 'Texract-JSON', 'TestanalyzeDocResponse.json');
+const loadData = (filePath) => {
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+};
 
-const data = JSON.parse(fs.readFileSync(inputFilePath, 'utf8'));
+const getBlockById = (data, blockId) => {
+  return data.Blocks.find((block) => block.Id === blockId);
+};
 
-function getBlockById(id) {
-  return data.Blocks.find((block) => block.Id === id);
-}
+const getWordCountFromLine = (data, lineBlock) => {
+  const wordIds = (lineBlock.Relationships || [{}])[0].Ids || [];
+  const words = wordIds.map((wordId) => getBlockById(data, wordId)).filter((wordBlock) => wordBlock && wordBlock.BlockType === "WORD");
 
-function getWordCountFromLine(lineBlock) {
-  const wordIds = lineBlock.Relationships ? lineBlock.Relationships.find((rel) => rel.Type === 'CHILD')?.Ids : [];
-  if (!wordIds) return 0;
+  return words.reduce((count, wordBlock) => count + (wordBlock.Text || "").split(" ").length, 0);
+};
 
-  const words = wordIds.map((id) => getBlockById(id)).filter((block) => block && block.BlockType === 'WORD');
-  const wordCount = words.reduce((count, wordBlock) => count + (wordBlock.Text ? wordBlock.Text.split(/\s+/).length : 0), 0);
+const getWordCountFromParent = (data, parentBlock) => {
+  const lineIds = (parentBlock.Relationships || [{}])[0].Ids || [];
+  const lines = lineIds.map((lineId) => getBlockById(data, lineId)).filter((lineBlock) => lineBlock && lineBlock.BlockType === "LINE");
 
-  return wordCount;
-}
+  return lines.reduce((count, line) => count + getWordCountFromLine(data, line), 0);
+};
 
-function getWordCountFromParent(parentBlock) {
-  const lineIds = parentBlock.Relationships ? parentBlock.Relationships.find((rel) => rel.Type === 'CHILD')?.Ids : [];
-  if (!lineIds) return 0;
+const renderBlockWithCounts = (data, block, blockCounts) => {
+  let output = "";
 
-  const lines = lineIds.map((id) => getBlockById(id)).filter((block) => block && block.BlockType === 'LINE');
-  const totalWordCount = lines.reduce((count, lineBlock) => count + getWordCountFromLine(lineBlock), 0);
+  if (block.BlockType in blockCounts) {
+    const wordCount = getWordCountFromParent(data, block);
+    blockCounts[block.BlockType].push(1);
+    const countIndex = blockCounts[block.BlockType].length;
+    output += `${block.BlockType}: ${countIndex} -> Word Count: ${wordCount}\n`;
+  }
 
-  return totalWordCount;
-}
+  const childIds = (block.Relationships || [{}])[0].Ids || [];
+  childIds.forEach((childId) => {
+    const childBlock = getBlockById(data, childId);
+    if (childBlock && childBlock.BlockType in blockCounts) {
+      output += renderBlockWithCounts(data, childBlock, blockCounts);
+    }
+  });
 
-function getLayoutDetails() {
-  const pageBlocks = data.Blocks.filter((block) => block.BlockType === 'PAGE');
-  let layoutDetails = '';
+  return output;
+};
+
+const getLayoutDetails = (filePath) => {
+  const data = loadData(filePath);
+  const pageBlocks = data.Blocks.filter((block) => block.BlockType === "PAGE");
+  let layoutDetails = "";
+
+  const blockCounts = {
+    LAYOUT_TITLE: [],
+    LAYOUT_SECTION_HEADER: [],
+    LAYOUT_TEXT: [],
+    LAYOUT_HEADER: [],
+    LAYOUT_FOOTER: [],
+  };
 
   pageBlocks.forEach((pageBlock) => {
-    let pageContent = `Page ${pageBlock.Page}\n\n`;
-    const blockCounts = {
-      LAYOUT_TITLE: [],
-      LAYOUT_SECTION_HEADER: [],
-      LAYOUT_TEXT: [],
-    };
+    layoutDetails += `Page ${pageBlock.Page}\n`;
 
-    function renderBlockWithCounts(block, blockCounts) {
-      let output = '';
+    const blockContent = pageBlock.Relationships[0].Ids.map((id) => getBlockById(data, id))
+      .map((block) => renderBlockWithCounts(data, block, blockCounts))
+      .join("");
 
-      if (block.BlockType === 'LAYOUT_TITLE' || block.BlockType === 'LAYOUT_SECTION_HEADER' || block.BlockType === 'LAYOUT_TEXT') {
-        const wordCount = getWordCountFromParent(block);
-
-        if (!blockCounts[block.BlockType]) {
-          blockCounts[block.BlockType] = [];
-        }
-        const countIndex = blockCounts[block.BlockType].length;
-        blockCounts[block.BlockType][countIndex] = (blockCounts[block.BlockType][countIndex] || 0) + 1;
-
-        output += `${block.BlockType} - ${countIndex + 1} Word Count: ${wordCount}\n`;
-      }
-
-      if (block.Relationships) {
-        const childIds = block.Relationships.filter((rel) => rel.Type === 'CHILD').flatMap((rel) => rel.Ids);
-
-        childIds.forEach((id) => {
-          const childBlock = getBlockById(id);
-          if (childBlock && (childBlock.BlockType === 'LAYOUT_TEXT' || childBlock.BlockType === 'LAYOUT_SECTION_HEADER')) {
-            output += renderBlockWithCounts(childBlock, blockCounts);
-          }
-        });
-      }
-
-      return output;
-    }
-
-    function renderBlocksWithCounts(blockIds, blockCounts) {
-      return blockIds
-        .map((id) => {
-          const block = getBlockById(id);
-          if (!block) return '';
-
-          return renderBlockWithCounts(block, blockCounts);
-        })
-        .join('');
-    }
-
-    const blockContent = renderBlocksWithCounts(pageBlock.Relationships[0].Ids, blockCounts);
-    layoutDetails += pageContent + blockContent + '\n';
+    layoutDetails += blockContent + "\n";
   });
 
   return layoutDetails;
-}
+};
 
-module.exports = { getLayoutDetails };
+const extractTextFromBlock = (data, block) => {
+  if (block.BlockType === "WORD") {
+    return block.Text || "";
+  }
+
+  let textContent = "";
+  if (block.Relationships) {
+    const childIds = block.Relationships[0].Ids || [];
+    childIds.forEach((childId) => {
+      const childBlock = getBlockById(data, childId);
+      textContent += extractTextFromBlock(data, childBlock) + " ";
+    });
+  }
+
+  return textContent.trim();
+};
+
+const getTextFromLayout = (filePath) => {
+  const data = loadData(filePath);
+  const pageBlocks = data.Blocks.filter((block) => block.BlockType === "PAGE");
+  let layoutText = "";
+
+  pageBlocks.forEach((pageBlock) => {
+    layoutText += `Page ${pageBlock.Page}\n`;
+
+    pageBlock.Relationships[0].Ids.forEach((blockId) => {
+      const block = getBlockById(data, blockId);
+
+      if (["LAYOUT_TITLE", "LAYOUT_SECTION_HEADER", "LAYOUT_TEXT", "LAYOUT_HEADER", "LAYOUT_FOOTER"].includes(block.BlockType)) {
+        const blockType = block.BlockType;
+        const text = extractTextFromBlock(data, block);
+        layoutText += `${blockType}: ${text}\n`;
+      }
+    });
+  });
+
+  return layoutText;
+};
+
+module.exports = {
+  getLayoutDetails,
+  getTextFromLayout,
+};
