@@ -30,9 +30,9 @@ const spinnerChars = ["|", "/", "-", "\\"];
 let spinnerIndex = 0;
 let spinnerInterval;
 
-function startSpinner() {
+function startSpinner(pageNumber) {
   spinnerInterval = setInterval(() => {
-    process.stdout.write(`\rGenerating the Magazine Contents... ${spinnerChars[spinnerIndex++]}`);
+    process.stdout.write(`\rGenerating the Page ${pageNumber} Contents of the Magazine... ${spinnerChars[spinnerIndex++]}`);
     spinnerIndex %= spinnerChars.length;
   }, 100);
 }
@@ -51,7 +51,7 @@ async function startChat() {
 
     if (previousContext) {
       latestUserPrompt = previousContext.latestUserPrompt || "";
-      if (previousContext.latestAIReply && Array.isArray(previousContext.latestAIReply.pages)) {
+      if (previousContext.latestAIReply && Array.isArray(previousContext.latestAIReply.pages)){
         latestAIReply = previousContext.latestAIReply.pages
           .map((page) => page.content)
           .filter((content) => content)
@@ -59,16 +59,19 @@ async function startChat() {
       }
     }
 
-    const previousUserPrompt = "Previous User Prompt:\n" + latestUserPrompt;
-    const previousAIReply = "Previous Magazine-AI Reply:\n" + latestAIReply;
+    if (latestUserPrompt && latestAIReply) {
+      const previousUserPrompt = "Previous User Prompt:\n" + latestUserPrompt;
+      const previousAIReply = "Previous Magazine-AI Reply:\n" + latestAIReply;
 
-    console.log(`\n${previousUserPrompt}\n${previousAIReply}`);
-    history.addMessage(new HumanMessage(previousUserPrompt));
-    history.addMessage(new AIMessage(previousAIReply));
+      console.log(`\n${previousUserPrompt}\n${previousAIReply}`);
+
+      history.addMessage(new HumanMessage(previousUserPrompt));
+      history.addMessage(new AIMessage(previousAIReply));
+    }
 
     const totalPages = getTotalPages();
     console.log("======================================================================================");
-    console.log(`Total Pages in the Magazine: ${totalPages}`);
+    console.log(`Total Pages to be generated in the Magazine: ${totalPages}`);
 
     rl.prompt();
 
@@ -90,7 +93,7 @@ async function startChat() {
         await appendMessage(pageNumber, "user", userInput);
         history.addMessage(userMessage);
 
-        startSpinner();
+        startSpinner(pageNumber);
         const messages = history.messages.map((message) => message.content);
         const response = await llm.invoke(messages);
         stopSpinner();
