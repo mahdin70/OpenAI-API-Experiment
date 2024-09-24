@@ -22,58 +22,71 @@ async function initMongo() {
 
 async function appendMessage(pageNumber, role, content) {
   try {
-    const conversation = await chatCollection.findOne({ pageNumber });
-
+    const conversation = await chatCollection.findOne({});
     const timestamp = new Date();
+
     const layoutDetails = getLayoutDetailsForPage(pageNumber);
     const layoutText = getTextFromLayoutForPage(pageNumber);
 
+    const updateOrInsertPage = (pages, newPage) => {
+      const pageIndex = pages.findIndex((page) => page.pageNumber === newPage.pageNumber);
+      if (pageIndex > -1) {
+        pages[pageIndex] = newPage;
+      } else {
+        pages.push(newPage);
+      }
+      return pages;
+    };
+
     if (conversation) {
+      const updates = {};
+
       if (role === "user") {
-        await chatCollection.updateOne(
-          { _id: conversation._id },
-          {
-            $set: {
-              latestUserPrompt: { role, content, timestamp },
-              updatedAt: timestamp,
-            },
+        if (!conversation.firstUserPrompt) {
+          updates.firstUserPrompt = content;
+        }
+        updates.latestUserPrompt = content;
+      }
+
+      if (role === "ai") {
+        const aiReplyEntry = { pageNumber, content };
+
+        if (!conversation.firstAIReply || !conversation.firstAIReply.pages.some((page) => page.pageNumber === pageNumber)) {
+          if (!conversation.firstAIReply) {
+            updates.firstAIReply = { pages: [aiReplyEntry] };
+          } else {
+            updates["firstAIReply.pages"] = updateOrInsertPage([...conversation.firstAIReply.pages], aiReplyEntry);
           }
-        );
-      } else if (role === "ai") {
-        if (!conversation.firstAIReply) {
-          await chatCollection.updateOne(
-            { _id: conversation._id },
-            {
-              $set: {
-                firstAIReply: { role, content, timestamp },
-                latestAIReply: { role, content, timestamp },
-                layoutDetails,
-                layoutText,
-                updatedAt: timestamp,
-              },
-            }
-          );
+        }
+
+        if (!conversation.latestAIReply) {
+          updates.latestAIReply = { pages: [aiReplyEntry] };
         } else {
-          await chatCollection.updateOne(
-            { _id: conversation._id },
-            {
-              $set: {
-                latestAIReply: { role, content, timestamp },
-                updatedAt: timestamp,
-              },
-            }
-          );
+          updates["latestAIReply.pages"] = updateOrInsertPage([...conversation.latestAIReply.pages], aiReplyEntry);
+        }
+
+        if (!conversation.layoutDetails || !conversation.layoutDetails.pages.some((page) => page.pageNumber === pageNumber)) {
+          updates["layoutDetails.pages"] = conversation.layoutDetails
+            ? [...conversation.layoutDetails.pages, { pageNumber, content: layoutDetails }]
+            : [{ pageNumber, content: layoutDetails }];
+        }
+
+        if (!conversation.layoutText || !conversation.layoutText.pages.some((page) => page.pageNumber === pageNumber)) {
+          updates["layoutText.pages"] = conversation.layoutText
+            ? [...conversation.layoutText.pages, { pageNumber, content: layoutText }]
+            : [{ pageNumber, content: layoutText }];
         }
       }
+
+      await chatCollection.updateOne({}, { $set: { ...updates, updatedAt: timestamp } });
     } else {
       const newEntry = {
-        pageNumber,
-        firstUserPrompt: role === "user" ? { role, content, timestamp } : null,
-        latestUserPrompt: role === "user" ? { role, content, timestamp } : null,
-        firstAIReply: role === "ai" ? { role, content, timestamp } : null,
-        latestAIReply: role === "ai" ? { role, content, timestamp } : null,
-        layoutDetails,
-        layoutText,
+        firstUserPrompt: role === "user" ? content : null,
+        latestUserPrompt: role === "user" ? content : null,
+        firstAIReply: role === "ai" ? { pages: [{ pageNumber, content }] } : null,
+        latestAIReply: role === "ai" ? { pages: [{ pageNumber, content }] } : null,
+        layoutDetails: { pages: [{ pageNumber, content: layoutDetails }] },
+        layoutText: { pages: [{ pageNumber, content: layoutText }] },
         createdAt: timestamp,
         updatedAt: timestamp,
       };
@@ -85,20 +98,18 @@ async function appendMessage(pageNumber, role, content) {
   }
 }
 
-async function fetchPreviousContext(pageNumber) {
+async function fetchPreviousContext() {
   try {
-    const conversation = await chatCollection.findOne({ pageNumber });
+    const conversation = await chatCollection.findOne({});
 
     if (conversation) {
       return {
         firstUserPrompt: conversation.firstUserPrompt || {},
-        firstAIReply: conversation.firstAIReply || {},
-        latestThread: {
-          userPrompt: conversation.latestUserPrompt || {},
-          aiReply: conversation.latestAIReply || {},
-        },
-        layoutDetails: conversation.layoutDetails || {},
-        layoutText: conversation.layoutText || {},
+        firstAIReply: conversation.firstAIReply || { pages: [] },
+        latestUserPrompt: conversation.latestUserPrompt || {},
+        latestAIReply: conversation.latestAIReply || { pages: [] },
+        layoutDetails: conversation.layoutDetails || { pages: [] },
+        layoutText: conversation.layoutText || { pages: [] },
       };
     }
     return {};

@@ -14,12 +14,12 @@ function getPaginationSystemMessage(pageNumber) {
   2. **Adhere to Word Count**: You can give more than the specified word count but not less than that.
 
   3. **Content Tone & Style**:
-     - Match the tone and text format of the extracted layout text for the page.
-     - Generate new content inspired by the layout text, ensuring relevance to the themes.
+     - Match the exact tone and text format of the extracted layout text for the page.
+     - Generate new and engaging content inspired by the layout text, ensuring relevance to the themes.
 
   4. **Respond to User Query**: Base your content on the user's query, ensuring it aligns with their needs while strictly following the layout structure for page ${pageNumber}.
 
-  **Document Layout Details for Page ${pageNumber}**:\n
+  **Layout Details for Page ${pageNumber}**:\n
   ${layoutDetails}
   
   **Extracted Layout Text from Page ${pageNumber}**:\n
