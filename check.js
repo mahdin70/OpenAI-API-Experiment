@@ -1,7 +1,7 @@
-import { getLayoutDetails, getTextFromLayout } from "./layoutUtils.js";
+import { getLayoutDetailsForPage, getTextFromLayoutForPage } from "./pageExtractor.js";
 
-const layoutDetails = getLayoutDetails();
-const layoutText = getTextFromLayout();
+const layoutDetails = getLayoutDetailsForPage(2);
+const layoutText = getTextFromLayoutForPage(2);
 
 console.log(layoutDetails);
 console.log(layoutText);

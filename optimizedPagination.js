@@ -2,7 +2,7 @@ require("dotenv").config();
 
 const readline = require("readline");
 const { getTotalPages } = require("./pageExtractor.js");
-const { getPaginationSystemMessage } = require("./paginationSystemMessage.js");
+const { getPaginationSystemMessage } = require("./optimizedSystemMessage.js");
 const { ChatOpenAI } = require("@langchain/openai");
 const { HumanMessage, AIMessage } = require("@langchain/core/messages");
 const { InMemoryChatMessageHistory } = require("@langchain/core/chat_history");
@@ -12,13 +12,11 @@ const openaiApiKey = process.env.OPENAI_API_KEY;
 const llm = new ChatOpenAI({
   model: "gpt-4o-mini",
   openaiApiKey: openaiApiKey,
-  temperature: 0.5, // Balanced creativity and relevance
-  maxTokens: 16384, // Maximum token limit
-  topP: 0.5, // Prevent repetition
+  temperature: 0.5,     // Balanced creativity and relevance
+  maxTokens: 16384,     // Maximum token limit
+  topP: 0.5,            // Prevent repetition
   presencePenalty: 0.8, // Maintains Context Strictly
 });
-
-const history = new InMemoryChatMessageHistory();
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -79,19 +77,24 @@ async function startChat() {
         return;
       }
 
+      let previousAIPageContent = ""; 
+
       for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
         console.log(`\nProcessing Page ${pageNumber} :\n`);
 
-        const systemMessage = getPaginationSystemMessage(pageNumber);
-        history.addMessage(systemMessage);
+        const pageHistory = new InMemoryChatMessageHistory();
+
+        const systemMessage = getPaginationSystemMessage(pageNumber, previousAIPageContent);
+        pageHistory.addMessage(systemMessage);
+
         const startTime = Date.now();
 
         const userMessage = new HumanMessage(userInput);
         await appendMessage(pageNumber, "user", userInput);
-        history.addMessage(userMessage);
+        pageHistory.addMessage(userMessage); 
 
         startSpinner(pageNumber);
-        const messages = history.messages.map((message) => message.content);
+        const messages = pageHistory.messages.map((message) => message.content);
         const response = await llm.invoke(messages);
         stopSpinner();
 
@@ -101,16 +104,19 @@ async function startChat() {
         const content = response.content;
         const tokenUsage = response.usage_metadata;
 
-        console.log(`\rPage ${pageNumber} - Magazine-AI: ${content}`);
+        console.log(`\rPage ${pageNumber} - Magazine-AI:\n ${content}`);
 
-        history.addMessage(new AIMessage(content));
         await appendMessage(pageNumber, "ai", content);
+        previousAIPageContent = content;
 
         console.log("===================================================================================");
         console.log(`Time taken: ${elapsedTime.toFixed(2)}s`);
         console.log(`Input Tokens: ${tokenUsage.input_tokens}`);
         console.log(`Output Tokens: ${tokenUsage.output_tokens}`);
         console.log(`Total Tokens: ${tokenUsage.total_tokens}`);
+
+        console.log("===================================================================================");
+        console.log(`History Object: \n ${messages}`);
       }
 
       console.log("Completed all pages.");
